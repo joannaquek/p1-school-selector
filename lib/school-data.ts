@@ -33,6 +33,8 @@ export function toSchoolCard(
     name: detail.name,
     address: detail.address,
     postalCode: detail.postalCode,
+    lat: detail.lat ?? null,
+    lng: detail.lng ?? null,
     distanceKm: detail.distanceKm,
     ballotingPressure: pressure,
     intakeDirection: detail.intakeDirection,

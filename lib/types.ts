@@ -5,6 +5,8 @@ export type SchoolCardData = {
   name: string;
   address: string;
   postalCode: string;
+  lat: number | null;
+  lng: number | null;
   /** `null` until home address is geocoded (OneMap). */
   distanceKm: number | null;
   ballotingPressure: "Low" | "Moderate" | "High";

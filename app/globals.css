@@ -486,30 +486,21 @@ a:focus-visible {
   color: var(--color-text-secondary);
 }
 
-.mapPlaceholder {
-  min-height: 280px;
-  border: 1px dashed var(--color-border-primary);
+.mapCanvasWrap {
+  border: 1px solid var(--color-border-primary);
   border-radius: var(--radius-sm);
-  display: grid;
-  place-content: center;
-  text-align: center;
-  gap: 0.35rem;
-  background:
-    radial-gradient(circle at 20% 30%, #dbeafe 0%, transparent 35%),
-    radial-gradient(circle at 80% 70%, #dcfce7 0%, transparent 35%),
-    var(--color-bg-tertiary);
+  overflow: hidden;
 }
 
-.mapPlaceholder p {
-  margin: 0;
-  font-weight: 700;
+.mapCanvas {
+  width: 100%;
+  min-height: 320px;
+  background: var(--color-bg-tertiary);
 }
 
-.mapPlaceholder span {
-  color: var(--color-text-secondary);
-  width: min(80%, 35ch);
-  margin: 0 auto;
-  font-size: 0.9rem;
+.leaflet-popup-content {
+  color: #0f172a;
+  font-family: var(--font-family-body), "Nunito", sans-serif;
 }
 
 .detailLayout {

@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -8,6 +9,7 @@ import { SchoolResultCard } from "@/components/school-result-card";
 import { SearchHeader } from "@/components/search-header";
 import { Card } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
+import { haversineKm, type GeoPoint } from "@/lib/geo";
 import {
   MAX_COMPARE_SCHOOLS,
   addSchoolToCompare,
@@ -20,6 +22,7 @@ import { getAllSchoolDetails, toSchoolCard } from "@/lib/school-data";
 import type { SearchState } from "@/lib/search-state";
 import { validateAddress } from "@/lib/search-state";
 import { serializeHomeStateToParams } from "@/lib/url-state-serializer";
+import type { SchoolCardData } from "@/lib/types";
 
 type HomePageClientProps = {
   initialSearch: SearchState;
@@ -30,6 +33,11 @@ function toggleItem<T extends string>(items: T[], value: T) {
   if (items.includes(value)) return items.filter((item) => item !== value);
   return [...items, value];
 }
+
+const HomeMap = dynamic(
+  () => import("@/components/home-map").then((module) => module.HomeMap),
+  { ssr: false }
+);
 
 export function HomePageClient({ initialSearch, initialFilters }: HomePageClientProps) {
   const router = useRouter();
@@ -44,19 +52,59 @@ export function HomePageClient({ initialSearch, initialFilters }: HomePageClient
     readCompareSlugsFromStorage()
   );
   const [compareNotice, setCompareNotice] = useState<string>("");
+  const [geocodeNotice, setGeocodeNotice] = useState<string>("");
 
   const geocodeStatus = validateAddress(searchState.address);
 
   const allDetails = useMemo(() => getAllSchoolDetails(), []);
 
-  const filteredSchools = useMemo(
+  const homePoint = useMemo<GeoPoint | null>(() => {
+    if (searchState.lat === null || searchState.lng === null) return null;
+    return { lat: searchState.lat, lng: searchState.lng };
+  }, [searchState.lat, searchState.lng]);
+
+  const cardsWithDistance = useMemo<SchoolCardData[]>(
     () =>
-      filterSchools(
-        allDetails.map((d) => toSchoolCard(d, filters.year, filters.phase)),
-        filters,
-        searchState.schoolQuery
-      ),
-    [allDetails, filters, searchState.schoolQuery]
+      allDetails.map((detail) => {
+        const card = toSchoolCard(detail, filters.year, filters.phase);
+        if (
+          homePoint &&
+          typeof detail.lat === "number" &&
+          typeof detail.lng === "number"
+        ) {
+          return {
+            ...card,
+            distanceKm: haversineKm(homePoint, { lat: detail.lat, lng: detail.lng })
+          };
+        }
+        return card;
+      }),
+    [allDetails, filters.phase, filters.year, homePoint]
+  );
+
+  const filteredSchools = useMemo(
+    () => filterSchools(cardsWithDistance, filters, searchState.schoolQuery),
+    [cardsWithDistance, filters, searchState.schoolQuery]
+  );
+
+  const detailBySlug = useMemo(
+    () => new Map(allDetails.map((school) => [school.slug, school])),
+    [allDetails]
+  );
+
+  const mapSchools = useMemo(
+    () =>
+      filteredSchools.map((card) => {
+        const detail = detailBySlug.get(card.slug);
+        return {
+          slug: card.slug,
+          name: card.name,
+          lat: detail?.lat ?? null,
+          lng: detail?.lng ?? null,
+          distanceKm: card.distanceKm
+        };
+      }),
+    [detailBySlug, filteredSchools]
   );
 
   useEffect(() => {
@@ -68,9 +116,47 @@ export function HomePageClient({ initialSearch, initialFilters }: HomePageClient
     writeCompareSlugsToStorage(compareSlugs);
   }, [compareSlugs]);
 
-  function handleSubmit() {
+  async function handleSubmit() {
     setIsSubmitting(true);
-    window.setTimeout(() => setIsSubmitting(false), 250);
+    setGeocodeNotice("");
+
+    const address = searchState.address.trim();
+    if (!address) {
+      setSearchState((prev) => ({ ...prev, lat: null, lng: null }));
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/onemap/search?q=${encodeURIComponent(address)}`);
+      const payload = (await response.json()) as
+        | { lat: number; lng: number; address: string }
+        | { error: string };
+
+      if (!response.ok || !("lat" in payload)) {
+        const msg =
+          "error" in payload
+            ? payload.error
+            : "Unable to geocode address. Please refine and retry.";
+        setGeocodeNotice(msg);
+        setSearchState((prev) => ({ ...prev, lat: null, lng: null }));
+        return;
+      }
+
+      setSearchState((prev) => ({
+        ...prev,
+        address: payload.address || prev.address,
+        lat: payload.lat,
+        lng: payload.lng
+      }));
+      setGeocodeNotice("Address matched. Distances and map updated.");
+      setMobileMapOpen(true);
+    } catch {
+      setGeocodeNotice("Network error while geocoding address.");
+      setSearchState((prev) => ({ ...prev, lat: null, lng: null }));
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   function handleAddToCompare(slug: string) {
@@ -103,6 +189,9 @@ export function HomePageClient({ initialSearch, initialFilters }: HomePageClient
   if (compareNotice) {
     notices.push(compareNotice);
   }
+  if (geocodeNotice) {
+    notices.push(geocodeNotice);
+  }
 
   const compareLink = `/compare?schools=${compareSlugs.join(",")}&year=${
     filters.year
@@ -114,7 +203,12 @@ export function HomePageClient({ initialSearch, initialFilters }: HomePageClient
         address={searchState.address}
         schoolQuery={searchState.schoolQuery}
         onAddressChange={(value) =>
-          setSearchState((prev) => ({ ...prev, address: value }))
+          setSearchState((prev) => ({
+            ...prev,
+            address: value,
+            lat: value.trim() === prev.address.trim() ? prev.lat : null,
+            lng: value.trim() === prev.address.trim() ? prev.lng : null
+          }))
         }
         onSchoolQueryChange={(value) =>
           setSearchState((prev) => ({ ...prev, schoolQuery: value }))
@@ -274,13 +368,12 @@ export function HomePageClient({ initialSearch, initialFilters }: HomePageClient
           aria-describedby="map-text-equivalent"
         >
           <SectionHeader title="Map view" />
-          <div className="mapPlaceholder">
-            <p>Interactive map placeholder</p>
-            <span id="map-text-equivalent">
-              Address: {searchState.address || "Not set"} · Phase {filters.phase}
-              {" · "}Year {filters.year}
-            </span>
-          </div>
+          <HomeMap schools={mapSchools} homePoint={homePoint} />
+          <p id="map-text-equivalent" className="caption">
+            Address: {searchState.address || "Not set"} · Phase {filters.phase} · Year{" "}
+            {filters.year} · {mapSchools.filter((s) => s.lat !== null).length} mapped
+            school(s)
+          </p>
         </Card>
       </section>
 

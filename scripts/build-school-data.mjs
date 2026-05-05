@@ -327,6 +327,8 @@ function main() {
       name: officialName.replace(/\s+/g, " ").trim(),
       address,
       postalCode: postal,
+      lat: null,
+      lng: null,
       distanceKm: null,
       ballotingPressure,
       intakeDirection: "no-change",

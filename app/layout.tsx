@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Lexend, Nunito } from "next/font/google";
 import "./globals.css";
+import "leaflet/dist/leaflet.css";
 
 const lexend = Lexend({
   subsets: ["latin"],
