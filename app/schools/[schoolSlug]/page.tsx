@@ -5,6 +5,7 @@ import { CcaProgrammeSection } from "@/components/cca-programme-section";
 import { SchoolSnapshotHeader } from "@/components/school-snapshot-header";
 import { SourceAttributionBlock } from "@/components/source-attribution-block";
 import { TopNav } from "@/components/top-nav";
+import { haversineKm } from "@/lib/geo";
 import type { PhaseFilter } from "@/lib/filter-state";
 import { getSchoolDetailBySlug } from "@/lib/school-data";
 
@@ -18,17 +19,33 @@ export default async function SchoolDetailPage({
   searchParams
 }: {
   params: Promise<{ schoolSlug: string }>;
-  searchParams: Promise<{ year?: string; phase?: string }>;
+  searchParams: Promise<{ year?: string; phase?: string; lat?: string; lng?: string }>;
 }) {
   const { schoolSlug } = await params;
   const query = await searchParams;
   const school = getSchoolDetailBySlug(schoolSlug);
   const year = Number(query.year) || 2025;
   const phase = parsePhase(query.phase);
+  const homeLat = Number(query.lat);
+  const homeLng = Number(query.lng);
 
   if (!school) {
     notFound();
   }
+
+  const detailSchool =
+    Number.isFinite(homeLat) &&
+    Number.isFinite(homeLng) &&
+    school.lat !== null &&
+    school.lng !== null
+      ? {
+          ...school,
+          distanceKm: haversineKm(
+            { lat: homeLat, lng: homeLng },
+            { lat: school.lat, lng: school.lng }
+          )
+        }
+      : school;
 
   const ballotingSource = school.sourceLinks.find(
     (source) =>
@@ -40,21 +57,21 @@ export default async function SchoolDetailPage({
     <>
       <TopNav />
       <main id="main-content" className="container detailLayout" tabIndex={-1}>
-        <SchoolSnapshotHeader school={school} year={year} phase={phase} />
+        <SchoolSnapshotHeader school={detailSchool} year={year} phase={phase} />
         <BallotingTrendModule
-          rows={school.ballotingHistory}
+          rows={detailSchool.ballotingHistory}
           source={ballotingSource}
         />
         <CcaProgrammeSection
-          ccas={school.ccas}
-          programmes={school.distinctiveProgrammes}
-          subjects={school.subjects}
+          ccas={detailSchool.ccas}
+          programmes={detailSchool.distinctiveProgrammes}
+          subjects={detailSchool.subjects}
         />
         <AffiliationPathwayCard
-          affiliation={school.affiliation}
-          notes={school.affiliationNotes}
+          affiliation={detailSchool.affiliation}
+          notes={detailSchool.affiliationNotes}
         />
-        <SourceAttributionBlock sources={school.sourceLinks} />
+        <SourceAttributionBlock sources={detailSchool.sourceLinks} />
       </main>
     </>
   );

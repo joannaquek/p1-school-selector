@@ -25,6 +25,8 @@ type SchoolResultCardProps = {
   school: SchoolCardData;
   year: number;
   phase: PhaseFilter;
+  homeLat: number | null;
+  homeLng: number | null;
   onAddToCompare: (slug: string) => void;
 };
 
@@ -32,14 +34,25 @@ export function SchoolResultCard({
   school,
   year,
   phase,
+  homeLat,
+  homeLng,
   onAddToCompare
 }: SchoolResultCardProps) {
+  const params = new URLSearchParams({
+    year: String(year),
+    phase
+  });
+  if (homeLat !== null && homeLng !== null) {
+    params.set("lat", String(homeLat));
+    params.set("lng", String(homeLng));
+  }
+
   return (
     <Card as="article" className="schoolCard">
       <header className="cardHeader">
         <div>
           <h3>
-            <Link href={`/schools/${school.slug}?year=${year}&phase=${phase}`}>
+            <Link href={`/schools/${school.slug}?${params.toString()}`}>
               {school.name}
             </Link>
           </h3>

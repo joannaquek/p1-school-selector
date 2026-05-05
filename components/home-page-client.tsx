@@ -353,6 +353,8 @@ export function HomePageClient({ initialSearch, initialFilters }: HomePageClient
                   school={school}
                   year={filters.year}
                   phase={filters.phase}
+                  homeLat={searchState.lat}
+                  homeLng={searchState.lng}
                   onAddToCompare={handleAddToCompare}
                 />
               ))

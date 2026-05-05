@@ -361,10 +361,34 @@ function main() {
     });
   }
 
-  bundled.sort((a, b) => a.name.localeCompare(b.name));
+  const dedupedBySchool = new Map();
+  for (const school of bundled) {
+    const key = `${school.slug}|${school.postalCode}`.toLowerCase();
+    const existing = dedupedBySchool.get(key);
+    if (!existing) {
+      dedupedBySchool.set(key, school);
+      continue;
+    }
 
-  fs.writeFileSync(outPath, JSON.stringify(bundled, null, 0), "utf8");
-  console.log("Wrote", bundled.length, "schools to", path.relative(root, outPath));
+    const existingScore = existing.ballotingHistory.reduce(
+      (sum, row) => sum + row.vacancies + row.applicants,
+      0
+    );
+    const incomingScore = school.ballotingHistory.reduce(
+      (sum, row) => sum + row.vacancies + row.applicants,
+      0
+    );
+
+    if (incomingScore > existingScore) {
+      dedupedBySchool.set(key, school);
+    }
+  }
+
+  const deduped = Array.from(dedupedBySchool.values());
+  deduped.sort((a, b) => a.name.localeCompare(b.name));
+
+  fs.writeFileSync(outPath, JSON.stringify(deduped, null, 0), "utf8");
+  console.log("Wrote", deduped.length, "schools to", path.relative(root, outPath));
   if (unmatched.length) {
     console.warn("Unmatched ballot slugs (no official row):", unmatched.length);
     console.warn(unmatched.slice(0, 25).join(", "), unmatched.length > 25 ? "…" : "");
