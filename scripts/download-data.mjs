@@ -20,8 +20,7 @@ const DATASETS = [
   { id: "d_db1faeea02c646fa3abccfa5aba99214", file: "distinctive.csv" }
 ];
 
-const SG_SCHOOLING_URL = "https://sgschooling.com/year/2025/all";
-const SG_SCHOOLING_FILE = "sgschooling-2025-all.html";
+const BALLOT_YEARS = [2025, 2024, 2023, 2022, 2021, 2020];
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -57,15 +56,18 @@ async function main() {
     console.log("  wrote", dest, fs.statSync(dest).size, "bytes");
   }
 
-  console.log("Fetching SG Schooling ballot page …");
-  const htmlRes = await fetch(SG_SCHOOLING_URL, {
-    headers: { "User-Agent": "Mozilla/5.0 (compatible; p1-school-selector/1.0)" },
-    redirect: "follow"
-  });
-  if (!htmlRes.ok) throw new Error(`SG Schooling HTTP ${htmlRes.status}`);
-  const htmlPath = path.join(rawDir, SG_SCHOOLING_FILE);
-  fs.writeFileSync(htmlPath, Buffer.from(await htmlRes.arrayBuffer()));
-  console.log("  wrote", htmlPath, fs.statSync(htmlPath).size, "bytes");
+  for (const year of BALLOT_YEARS) {
+    console.log(`Fetching SG Schooling ballot page (${year}) …`);
+    const htmlRes = await fetch(`https://sgschooling.com/year/${year}/all`, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; p1-school-selector/1.0)" },
+      redirect: "follow"
+    });
+    if (!htmlRes.ok) throw new Error(`SG Schooling HTTP ${htmlRes.status} for year ${year}`);
+    const htmlPath = path.join(rawDir, `sgschooling-${year}-all.html`);
+    fs.writeFileSync(htmlPath, Buffer.from(await htmlRes.arrayBuffer()));
+    console.log("  wrote", htmlPath, fs.statSync(htmlPath).size, "bytes");
+    await sleep(700);
+  }
   console.log("Done. Run: npm run data:build");
 }
 

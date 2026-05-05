@@ -6,7 +6,7 @@
 | `cca.csv` | data.gov.sg — CCAs |
 | `subjects.csv` | data.gov.sg — subjects offered |
 | `distinctive.csv` | data.gov.sg — distinctive programmes |
-| `sgschooling-2025-all.html` | [SG Schooling](https://sgschooling.com/year/2025/all) — **unofficial** P1 ballot table (scraped snapshot) |
+| `sgschooling-<year>-all.html` | [SG Schooling](https://sgschooling.com/year/) — **unofficial** P1 ballot tables (scraped yearly snapshots, currently 2020–2025) |
 
 Populate this folder with:
 

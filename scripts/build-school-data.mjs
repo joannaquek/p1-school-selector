@@ -1,9 +1,9 @@
 /**
  * Builds lib/schools-bundled.json from:
  * - data.gov.sg CSVs in data/raw/ (downloaded via npm run data:download)
- * - SG Schooling P1 ballot HTML in data/raw/sgschooling-2025-all.html (from npm run data:download)
+ * - SG Schooling P1 ballot HTML in data/raw/sgschooling-<year>-all.html (from npm run data:download)
  *
- * Third-party ballot source: https://sgschooling.com/year/2025/all
+ * Third-party ballot source: https://sgschooling.com/year/
  * Official school profiles: data.gov.sg MOE datasets (see lib/source-catalog.ts)
  */
 
@@ -120,6 +120,17 @@ function parsePhaseRow($, tr, kind) {
   return phases;
 }
 
+function phasePayloadScore(phases) {
+  return Object.values(phases).reduce((sum, rec) => {
+    return (
+      sum +
+      Number(rec.vacancy ?? 0) +
+      Number(rec.applied ?? 0) +
+      Number(rec.taken ?? 0)
+    );
+  }, 0);
+}
+
 function mergePhaseData(target, patch) {
   if (!patch) return;
   for (const [ph, cell] of Object.entries(patch)) {
@@ -128,7 +139,7 @@ function mergePhaseData(target, patch) {
   }
 }
 
-function parseBallotHtml(htmlPath) {
+function parseBallotHtml(htmlPath, year) {
   const html = fs.readFileSync(htmlPath, "utf8");
   const $ = cheerio.load(html);
   const trs = $("table tbody tr").toArray();
@@ -153,7 +164,7 @@ function parseBallotHtml(htmlPath) {
     mergePhaseData(phases, rVac);
     mergePhaseData(phases, rApp);
     mergePhaseData(phases, rTaken);
-    out.push({ slug, displayName: name, phases });
+    out.push({ slug, displayName: name, phases, year });
     i += 3;
   }
   return out;
@@ -229,10 +240,13 @@ function main() {
   const ccaPath = path.join(root, "data/raw/cca.csv");
   const subjectsPath = path.join(root, "data/raw/subjects.csv");
   const distinctivePath = path.join(root, "data/raw/distinctive.csv");
-  const ballotPath = path.join(root, "data/raw/sgschooling-2025-all.html");
   const outPath = path.join(root, "lib/schools-bundled.json");
+  const ballotYears = [2025, 2024, 2023, 2022, 2021, 2020];
+  const ballotPaths = ballotYears.map((year) =>
+    path.join(root, `data/raw/sgschooling-${year}-all.html`)
+  );
 
-  for (const p of [generalPath, ccaPath, subjectsPath, distinctivePath, ballotPath]) {
+  for (const p of [generalPath, ccaPath, subjectsPath, distinctivePath, ...ballotPaths]) {
     if (!fs.existsSync(p)) {
       console.error("Missing input:", p);
       console.error("Run: npm run data:download");
@@ -241,7 +255,18 @@ function main() {
   }
 
   const primaryRows = findPrimaryRows(generalPath);
-  const ballots = parseBallotHtml(ballotPath);
+  const ballots = ballotPaths.flatMap((ballotPath, idx) =>
+    parseBallotHtml(ballotPath, ballotYears[idx])
+  );
+  const latestYear = Math.max(...ballotYears);
+  const ballotBySlugYear = new Map();
+  for (const b of ballots) {
+    const key = `${b.slug}|${b.year}`;
+    const existing = ballotBySlugYear.get(key);
+    if (!existing || phasePayloadScore(b.phases) > phasePayloadScore(existing.phases)) {
+      ballotBySlugYear.set(key, b);
+    }
+  }
 
   const ccaRows = parseCsv(fs.readFileSync(ccaPath, "utf8")).rows.filter(
     (r) => (r.school_section || "").toUpperCase() === "PRIMARY"
@@ -254,10 +279,12 @@ function main() {
   const bundled = [];
   const unmatched = [];
 
-  for (const b of ballots) {
-    const csv = matchCsvRow(b.slug, primaryRows);
+  const slugSet = new Set(Array.from(ballotBySlugYear.keys()).map((key) => key.split("|")[0]));
+
+  for (const slug of slugSet) {
+    const csv = matchCsvRow(slug, primaryRows);
     if (!csv) {
-      unmatched.push(b.slug);
+      unmatched.push(slug);
       continue;
     }
 
@@ -287,43 +314,38 @@ function main() {
 
     const postal = String(csv.postal_code || "").replace(/\s+/g, "").trim();
 
-    const p2a = b.phases["2A"] || {};
-    const p2b = b.phases["2B"] || {};
-    const p2c = b.phases["2C"] || {};
+    const latestBallot = ballotBySlugYear.get(`${slug}|${latestYear}`);
+    const latestPhases = latestBallot?.phases ?? {};
+    const p2c = latestPhases["2C"] || {};
 
     const vac2c = p2c.vacancy;
     const app2c = p2c.applied;
     const ballotingPressure = pressureFromRatio(app2c, vac2c);
-    const balloted2c = app2c != null && vac2c != null && app2c > vac2c;
 
-    const ballotingHistory = [
-      {
-        year: 2025,
-        phase: "2A",
-        vacancies: p2a.vacancy ?? 0,
-        applicants: p2a.applied ?? 0,
-        balloted: (p2a.applied ?? 0) > (p2a.vacancy ?? 0)
-      },
-      {
-        year: 2025,
-        phase: "2B",
-        vacancies: p2b.vacancy ?? 0,
-        applicants: p2b.applied ?? 0,
-        balloted: (p2b.applied ?? 0) > (p2b.vacancy ?? 0)
-      },
-      {
-        year: 2025,
-        phase: "2C",
-        vacancies: p2c.vacancy ?? 0,
-        applicants: p2c.applied ?? 0,
-        balloted: balloted2c
-      }
-    ];
+    const ballotingHistory = [];
+    for (const year of ballotYears) {
+      const rec = ballotBySlugYear.get(`${slug}|${year}`);
+      if (!rec) continue;
+      const phases = rec.phases;
+      (["2A", "2B", "2C"]).forEach((phase) => {
+        const p = phases[phase] || {};
+        const vacancies = Number(p.vacancy ?? 0);
+        const applicants = Number(p.applied ?? 0);
+        if (vacancies === 0 && applicants === 0) return;
+        ballotingHistory.push({
+          year,
+          phase,
+          vacancies,
+          applicants,
+          balloted: applicants > vacancies
+        });
+      });
+    }
 
     const address = (csv.address || "").replace(/\s+/g, " ").trim();
 
     bundled.push({
-      slug: b.slug,
+      slug,
       name: officialName.replace(/\s+/g, " ").trim(),
       address,
       postalCode: postal,
@@ -348,8 +370,8 @@ function main() {
           lastUpdated: "2026-04-17"
         },
         {
-          label: "SG Schooling — P1 ballot history (unofficial aggregation)",
-          url: "https://sgschooling.com/year/2025/all",
+          label: "SG Schooling — P1 ballot history (unofficial aggregation, 2020–2025)",
+          url: "https://sgschooling.com/year/",
           lastUpdated: "2026-05-04"
         },
         {
