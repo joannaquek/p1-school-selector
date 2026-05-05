@@ -51,15 +51,16 @@ function matchesCcaCategory(
 export function filterSchools(
   schools: SchoolCardData[],
   filters: FilterState,
-  schoolQuery: string
+  schoolQuery: string,
+  hasHomePoint: boolean
 ) {
   const query = normalizeQuery(schoolQuery);
 
   return schools.filter((school) => {
-    const distanceAllowed =
-      filters.distanceBand === "4" ||
-      school.distanceKm === null ||
-      school.distanceKm <= Number(filters.distanceBand);
+    const distanceAllowed = !hasHomePoint
+      ? true
+      : school.distanceKm !== null &&
+        school.distanceKm <= Number(filters.distanceBand);
 
     const pressureAllowed =
       filters.pressure === "all" ||

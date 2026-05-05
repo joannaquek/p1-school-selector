@@ -83,8 +83,14 @@ export function HomePageClient({ initialSearch, initialFilters }: HomePageClient
   );
 
   const filteredSchools = useMemo(
-    () => filterSchools(cardsWithDistance, filters, searchState.schoolQuery),
-    [cardsWithDistance, filters, searchState.schoolQuery]
+    () =>
+      filterSchools(
+        cardsWithDistance,
+        filters,
+        searchState.schoolQuery,
+        homePoint !== null
+      ),
+    [cardsWithDistance, filters, homePoint, searchState.schoolQuery]
   );
 
   const detailBySlug = useMemo(
