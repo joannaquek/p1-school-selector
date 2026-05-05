@@ -15,6 +15,22 @@ export function BallotingTrendModule({
   rows: BallotingPhaseRecord[];
   source?: SourceLink;
 }) {
+  const rowsByYear = rows.reduce<Record<number, BallotingPhaseRecord[]>>((acc, row) => {
+    if (!acc[row.year]) acc[row.year] = [];
+    acc[row.year].push(row);
+    return acc;
+  }, {});
+
+  const orderedYears = Object.keys(rowsByYear)
+    .map(Number)
+    .sort((a, b) => b - a);
+
+  const phaseOrder: Record<BallotingPhaseRecord["phase"], number> = {
+    "2A": 1,
+    "2B": 2,
+    "2C": 3
+  };
+
   return (
     <Card as="section">
       <SectionHeader
@@ -38,20 +54,30 @@ export function BallotingTrendModule({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={`${row.year}-${row.phase}`}>
-                <td>{row.year}</td>
-                <td>{row.phase}</td>
-                <td>{row.vacancies}</td>
-                <td>{row.applicants}</td>
-                <td>{ratio(row)}</td>
-                <td>
-                  <span className={`pill ${row.balloted ? "decrease" : "increase"}`}>
-                    {row.balloted ? "Yes" : "No"}
-                  </span>
-                </td>
-              </tr>
-            ))}
+            {orderedYears.flatMap((year) => {
+              const yearRows = [...rowsByYear[year]].sort(
+                (a, b) => phaseOrder[a.phase] - phaseOrder[b.phase]
+              );
+
+              return yearRows.map((row, idx) => (
+                <tr key={`${row.year}-${row.phase}`}>
+                  {idx === 0 ? (
+                    <th rowSpan={yearRows.length} className="trendYearCell">
+                      {year}
+                    </th>
+                  ) : null}
+                  <td>{row.phase}</td>
+                  <td>{row.vacancies}</td>
+                  <td>{row.applicants}</td>
+                  <td>{ratio(row)}</td>
+                  <td>
+                    <span className={`pill ${row.balloted ? "decrease" : "increase"}`}>
+                      {row.balloted ? "Yes" : "No"}
+                    </span>
+                  </td>
+                </tr>
+              ));
+            })}
           </tbody>
         </table>
       </div>

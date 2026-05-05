@@ -563,6 +563,11 @@ a:focus-visible {
   font-weight: 700;
 }
 
+.trendYearCell {
+  vertical-align: top;
+  padding-top: 0.7rem;
+}
+
 .fitGrid {
   display: grid;
   gap: 0.85rem;
